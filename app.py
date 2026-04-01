@@ -40,6 +40,16 @@ def safe_filename(text):
     return re.sub(r"[^\w\-]", "_", text).strip("_")
 
 
+@app.errorhandler(500)
+def handle_500(e):
+    import traceback
+    tb = traceback.format_exc()
+    app.logger.error(f"Unhandled 500: {e}\n{tb}")
+    if request.path.startswith(("/generate", "/api/")):
+        return jsonify({"error": str(e), "traceback": tb}), 500
+    return f"<h1>500</h1><pre>{tb}</pre>", 500
+
+
 # -------------------------------------------------------------------
 # Routes
 # -------------------------------------------------------------------
@@ -169,8 +179,10 @@ def generate(course_id, module_id):
         return jsonify({"status": "created", "brief_id": brief["id"]})
 
     except Exception as e:
-        app.logger.exception(f"Generate failed for course={course_id} module={module_id}")
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        tb = traceback.format_exc()
+        app.logger.error(f"Generate failed: {tb}")
+        return jsonify({"error": str(e), "traceback": tb}), 500
 
 
 @app.route("/library")
