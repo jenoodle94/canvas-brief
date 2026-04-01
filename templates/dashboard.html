@@ -52,10 +52,12 @@ async function generateBrief(courseId, moduleId, btn) {
         }
 
         let data;
+        const rawText = await resp.text();
         try {
-            data = await resp.json();
+            data = JSON.parse(rawText);
         } catch (parseErr) {
-            btn.textContent = "Server error — try again";
+            // Show status + first 100 chars of non-JSON response for debugging
+            btn.textContent = `Error ${resp.status}: ${rawText.substring(0, 100)}`;
             btn.disabled = false;
             btn.classList.remove("loading");
             return;
