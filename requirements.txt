@@ -1,0 +1,7 @@
+flask
+requests
+anthropic
+python-dotenv
+pypdf
+fpdf2
+gunicorn

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}My Courses — Canvas Brief{% endblock %}
+
+{% block content %}
+<h1>My Courses</h1>
+<p class="subtitle">Click "Generate Brief" for any session. If a brief already exists, you can download it directly.</p>
+
+{% for course in courses %}
+<div class="card course-card">
+    <h2>{{ course.name }}</h2>
+    {% if course.sessions %}
+    <div class="session-list">
+        {% for s in course.sessions %}
+        <div class="session-row" id="session-{{ course.id }}-{{ s.id }}">
+            <span class="session-name">{{ s.name }}</span>
+            <div class="session-actions">
+                {% if s.has_brief %}
+                    <a href="{{ url_for('view', brief_id=s.brief_id) }}" class="btn-small" target="_blank">View</a>
+                    <a href="{{ url_for('download', brief_id=s.brief_id) }}" class="btn-small btn-outline">Download</a>
+                {% else %}
+                    <button class="btn-small btn-generate"
+                            onclick="generateBrief({{ course.id }}, {{ s.id }}, this)">
+                        Generate Brief
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No session modules found for this course.</p>
+    {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function generateBrief(courseId, moduleId, btn) {
+    btn.disabled = true;
+    btn.textContent = "Generating...";
+    btn.classList.add("loading");
+
+    try {
+        const resp = await fetch(`/generate/${courseId}/${moduleId}`, {method: "POST"});
+        const data = await resp.json();
+
+        if (data.error) {
+            btn.textContent = data.error;
+            btn.classList.remove("loading");
+            btn.classList.add("error");
+            setTimeout(() => {
+                btn.textContent = "Generate Brief";
+                btn.disabled = false;
+                btn.classList.remove("error");
+            }, 3000);
+            return;
+        }
+
+        // Replace button with view/download links
+        const actions = btn.parentElement;
+        actions.innerHTML = `
+            <a href="/view/${data.brief_id}" class="btn-small" target="_blank">View</a>
+            <a href="/download/${data.brief_id}" class="btn-small btn-outline">Download</a>
+        `;
+    } catch (e) {
+        btn.textContent = "Error — try again";
+        btn.disabled = false;
+        btn.classList.remove("loading");
+    }
+}
+</script>
+{% endblock %}

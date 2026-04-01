@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+briefs/
+*.db
+import_existing.py

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Metrics — Canvas Brief{% endblock %}
+
+{% block content %}
+<h1>Metrics</h1>
+<p class="subtitle">Usage data for case study analysis.</p>
+
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-number">{{ metrics.unique_sessions }}</div>
+        <div class="metric-label">Unique Users</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-number">{{ metrics.total_briefs }}</div>
+        <div class="metric-label">Briefs Generated</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-number">{{ metrics.total_downloads }}</div>
+        <div class="metric-label">Total Downloads</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-number">{{ metrics.total_generates }}</div>
+        <div class="metric-label">Generate Requests</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Downloads by Course</h2>
+    {% if metrics.downloads_by_course %}
+    <table>
+        <thead>
+            <tr><th>Course</th><th>Downloads</th></tr>
+        </thead>
+        <tbody>
+            {% for row in metrics.downloads_by_course %}
+            <tr>
+                <td>{{ row.course_name }}</td>
+                <td>{{ row.cnt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No downloads yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Most Popular Briefs</h2>
+    {% if metrics.top_briefs %}
+    <table>
+        <thead>
+            <tr><th>Session</th><th>Course</th><th>Downloads</th></tr>
+        </thead>
+        <tbody>
+            {% for row in metrics.top_briefs %}
+            <tr>
+                <td>{{ row.module_name }}</td>
+                <td>{{ row.course_name }}</td>
+                <td>{{ row.cnt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No downloads yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Daily Activity (Last 30 Days)</h2>
+    {% if metrics.daily_activity %}
+    <table>
+        <thead>
+            <tr><th>Date</th><th>Event</th><th>Count</th></tr>
+        </thead>
+        <tbody>
+            {% for row in metrics.daily_activity %}
+            <tr>
+                <td>{{ row.day }}</td>
+                <td>{{ row.event_type }}</td>
+                <td>{{ row.cnt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No activity yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Raw Data (JSON)</h2>
+    <p>For further analysis: <a href="{{ url_for('api_metrics') }}">/api/metrics</a></p>
+</div>
+{% endblock %}

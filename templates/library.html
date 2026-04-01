@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Brief Library — Canvas Brief{% endblock %}
+
+{% block content %}
+<h1>Brief Library</h1>
+<p class="subtitle">All generated study briefs. Download any PDF to print for class.</p>
+
+{% if courses %}
+    {% for course_name, briefs in courses.items() %}
+    <div class="card course-card">
+        <h2>{{ course_name }}</h2>
+        <div class="session-list">
+            {% for b in briefs %}
+            <div class="session-row">
+                <span class="session-name">{{ b.module_name }}</span>
+                <div class="session-actions">
+                    <a href="{{ url_for('view', brief_id=b.id) }}" class="btn-small" target="_blank">View</a>
+                    <a href="{{ url_for('download', brief_id=b.id) }}" class="btn-small btn-outline">Download</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <p>No briefs have been generated yet. <a href="{{ url_for('index') }}">Connect your Canvas</a> to generate the first ones!</p>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Canvas Brief — AI Study Briefs for Stanford{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Canvas Brief</h1>
+    <p class="subtitle">AI-generated study briefs from your Canvas modules. Summarizes cases, answers study questions, and creates printable PDFs for class.</p>
+</div>
+
+<div class="two-col">
+    <div class="card">
+        <h2>Connect Your Canvas</h2>
+        <p>Paste your Canvas API token to see your courses and generate briefs for any session.</p>
+        <form method="POST" action="{{ url_for('connect') }}">
+            <input type="password" name="token" placeholder="Canvas API Token" required>
+            <button type="submit" class="btn">Connect</button>
+        </form>
+        <details class="help-text">
+            <summary>How do I get my token?</summary>
+            <ol>
+                <li>Go to <strong>canvas.stanford.edu</strong></li>
+                <li>Click your profile icon (top-left) then <strong>Settings</strong></li>
+                <li>Scroll to <strong>Approved Integrations</strong></li>
+                <li>Click <strong>+ New Access Token</strong></li>
+                <li>Give it a name (e.g. "Canvas Brief") and click <strong>Generate Token</strong></li>
+                <li>Copy the token and paste it above</li>
+            </ol>
+            <p>Your token is used only during your session and is never stored.</p>
+        </details>
+    </div>
+
+    <div class="card">
+        <h2>Browse the Library</h2>
+        <p>Briefs are shared across all students. If someone has already generated a brief for your session, just download it.</p>
+        <a href="{{ url_for('library') }}" class="btn btn-outline">Browse All Briefs</a>
+    </div>
+</div>
+{% endblock %}
