@@ -76,17 +76,24 @@ def get_module_items(token, course_id, module_id):
     return resp.json()
 
 
-def download_pdf_text(token, file_url, max_bytes=10_000_000):
+def download_pdf_text(token, file_url, max_bytes=5_000_000):
     """Download PDF and extract text. Skips files larger than max_bytes."""
+    import gc
     resp = requests.get(file_url, headers=_headers(token), allow_redirects=True, timeout=60)
     resp.raise_for_status()
     if len(resp.content) > max_bytes:
         return "[PDF too large to process]"
     reader = PdfReader(io.BytesIO(resp.content))
-    # Limit to first 50 pages to keep memory in check
-    pages_to_read = reader.pages[:50]
+    # Limit to first 20 pages to keep memory low on free-tier hosting
+    pages_to_read = reader.pages[:20]
     pages = [p.extract_text() for p in pages_to_read if p.extract_text()]
-    return "\n\n".join(pages)
+    text = "\n\n".join(pages)
+    # Truncate to ~15k chars to keep Claude prompt reasonable
+    if len(text) > 15000:
+        text = text[:15000] + "\n... [truncated]"
+    del reader
+    gc.collect()
+    return text
 
 
 def get_file_content(token, content_id):

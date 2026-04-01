@@ -4,6 +4,7 @@ A tool for Stanford students to generate and share AI study briefs
 from their Canvas course modules.
 """
 
+import gc
 import hashlib
 import logging
 import os
@@ -142,18 +143,23 @@ def generate(course_id, module_id):
         # Fetch content
         app.logger.info(f"Generate: fetching content for {module_name}")
         content = canvas_api.fetch_module_content(token, course_id, module)
+        gc.collect()
         if not content:
             return jsonify({"error": "No readable content in this module yet"}), 404
 
         # Generate brief
         app.logger.info(f"Generate: calling Claude for {module_name}")
         brief_text = brief_generator.generate_brief_text(course_name, module_name, content)
+        del content
+        gc.collect()
 
         # Save PDF
         app.logger.info(f"Generate: creating PDF for {module_name}")
         filename = f"{safe_filename(course_name)}__{safe_filename(module_name)}.pdf"
         filepath = os.path.join(BRIEFS_DIR, filename)
         brief_generator.create_pdf(brief_text, filepath)
+        del brief_text
+        gc.collect()
 
         # Save to database
         database.save_brief(course_id, course_name, module_id, module_name, filename)
