@@ -76,11 +76,16 @@ def get_module_items(token, course_id, module_id):
     return resp.json()
 
 
-def download_pdf_text(token, file_url):
+def download_pdf_text(token, file_url, max_bytes=10_000_000):
+    """Download PDF and extract text. Skips files larger than max_bytes."""
     resp = requests.get(file_url, headers=_headers(token), allow_redirects=True, timeout=60)
     resp.raise_for_status()
+    if len(resp.content) > max_bytes:
+        return "[PDF too large to process]"
     reader = PdfReader(io.BytesIO(resp.content))
-    pages = [p.extract_text() for p in reader.pages if p.extract_text()]
+    # Limit to first 50 pages to keep memory in check
+    pages_to_read = reader.pages[:50]
+    pages = [p.extract_text() for p in pages_to_read if p.extract_text()]
     return "\n\n".join(pages)
 
 
