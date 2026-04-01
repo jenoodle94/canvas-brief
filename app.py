@@ -220,6 +220,44 @@ def api_metrics():
     return jsonify(database.get_metrics())
 
 
+@app.route("/health")
+def health():
+    """Diagnostic endpoint."""
+    import anthropic
+    checks = {}
+
+    # Check data dir
+    checks["data_dir"] = DATA_DIR
+    checks["data_dir_exists"] = os.path.exists(DATA_DIR)
+    checks["briefs_dir"] = BRIEFS_DIR
+    checks["briefs_dir_exists"] = os.path.exists(BRIEFS_DIR)
+    checks["briefs_dir_writable"] = os.access(BRIEFS_DIR, os.W_OK)
+
+    # Check DB
+    try:
+        briefs = database.get_all_briefs()
+        checks["db_ok"] = True
+        checks["db_brief_count"] = len(briefs)
+    except Exception as e:
+        checks["db_ok"] = False
+        checks["db_error"] = str(e)
+
+    # Check Anthropic key
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    checks["anthropic_key_set"] = bool(api_key)
+    checks["anthropic_key_prefix"] = api_key[:12] + "..." if api_key else "(not set)"
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        client.models.list()
+        checks["anthropic_api_ok"] = True
+    except Exception as e:
+        checks["anthropic_api_ok"] = False
+        checks["anthropic_error"] = str(e)
+
+    return jsonify(checks)
+
+
 # -------------------------------------------------------------------
 # Startup
 # -------------------------------------------------------------------
