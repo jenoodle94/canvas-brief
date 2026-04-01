@@ -5,6 +5,7 @@ from their Canvas course modules.
 """
 
 import hashlib
+import logging
 import os
 import re
 
@@ -123,6 +124,7 @@ def generate(course_id, module_id):
 
     try:
         # Get course name
+        app.logger.info(f"Generate: fetching courses for course_id={course_id}")
         courses = canvas_api.get_courses(token)
         course = next((c for c in courses if c["id"] == course_id), None)
         if not course:
@@ -130,6 +132,7 @@ def generate(course_id, module_id):
         course_name = course["name"]
 
         # Get module
+        app.logger.info(f"Generate: fetching modules for {course_name}")
         modules = canvas_api.get_modules(token, course_id)
         module = next((m for m in modules if m["id"] == module_id), None)
         if not module:
@@ -137,14 +140,17 @@ def generate(course_id, module_id):
         module_name = module["name"]
 
         # Fetch content
+        app.logger.info(f"Generate: fetching content for {module_name}")
         content = canvas_api.fetch_module_content(token, course_id, module)
         if not content:
             return jsonify({"error": "No readable content in this module yet"}), 404
 
         # Generate brief
+        app.logger.info(f"Generate: calling Claude for {module_name}")
         brief_text = brief_generator.generate_brief_text(course_name, module_name, content)
 
         # Save PDF
+        app.logger.info(f"Generate: creating PDF for {module_name}")
         filename = f"{safe_filename(course_name)}__{safe_filename(module_name)}.pdf"
         filepath = os.path.join(BRIEFS_DIR, filename)
         brief_generator.create_pdf(brief_text, filepath)
@@ -157,6 +163,7 @@ def generate(course_id, module_id):
         return jsonify({"status": "created", "brief_id": brief["id"]})
 
     except Exception as e:
+        app.logger.exception(f"Generate failed for course={course_id} module={module_id}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -218,6 +225,12 @@ def api_metrics():
 # -------------------------------------------------------------------
 
 database.init_db()
+
+# Configure logging for Render / Gunicorn
+if not app.debug:
+    gunicorn_logger = logging.getLogger("gunicorn.error")
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

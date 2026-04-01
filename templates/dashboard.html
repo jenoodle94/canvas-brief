@@ -43,7 +43,23 @@ async function generateBrief(courseId, moduleId, btn) {
 
     try {
         const resp = await fetch(`/generate/${courseId}/${moduleId}`, {method: "POST"});
-        const data = await resp.json();
+
+        if (!resp.ok && resp.status === 504) {
+            btn.textContent = "Timeout — try again";
+            btn.disabled = false;
+            btn.classList.remove("loading");
+            return;
+        }
+
+        let data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            btn.textContent = "Server error — try again";
+            btn.disabled = false;
+            btn.classList.remove("loading");
+            return;
+        }
 
         if (data.error) {
             btn.textContent = data.error;
@@ -53,7 +69,7 @@ async function generateBrief(courseId, moduleId, btn) {
                 btn.textContent = "Generate Brief";
                 btn.disabled = false;
                 btn.classList.remove("error");
-            }, 3000);
+            }, 5000);
             return;
         }
 
@@ -64,7 +80,7 @@ async function generateBrief(courseId, moduleId, btn) {
             <a href="/download/${data.brief_id}" class="btn-small btn-outline">Download</a>
         `;
     } catch (e) {
-        btn.textContent = "Error — try again";
+        btn.textContent = "Network error — try again";
         btn.disabled = false;
         btn.classList.remove("loading");
     }
