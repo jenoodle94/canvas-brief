@@ -14,6 +14,7 @@
                 <a href="{{ url_for('library') }}">Library</a>
                 {% if session.get('canvas_token') %}
                     <a href="{{ url_for('dashboard') }}">My Courses</a>
+                    <a href="{{ url_for('weekly') }}">Weekly View</a>
                     <a href="{{ url_for('disconnect') }}" class="btn-small">Disconnect</a>
                 {% endif %}
                 <a href="{{ url_for('metrics') }}">Metrics</a>

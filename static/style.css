@@ -221,3 +221,353 @@ footer {
 }
 
 .muted { color: var(--text-muted); font-size: 0.9rem; }
+
+/* --- Weekly View --- */
+.weekly-container {
+    display: flex;
+    gap: 0;
+    min-height: calc(100vh - 56px - 80px);
+}
+
+/* Sidebar */
+.weekly-sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--card-bg);
+    border-right: 1px solid var(--border);
+    padding: 1rem;
+    transition: width 0.2s, min-width 0.2s, padding 0.2s;
+    overflow: hidden;
+}
+
+.weekly-sidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+}
+
+.weekly-sidebar.collapsed .sidebar-body,
+.weekly-sidebar.collapsed .sidebar-header h3 {
+    display: none;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.sidebar-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+.sidebar-toggle:hover { background: var(--bg); }
+
+.sidebar-course {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.sidebar-course input[type="checkbox"] {
+    flex-shrink: 0;
+    accent-color: var(--cardinal);
+}
+
+.course-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.course-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-loading {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+}
+
+/* Main content area */
+.weekly-main {
+    flex: 1;
+    min-width: 0;
+    padding: 1rem 1.5rem;
+}
+
+/* Quarter label */
+.weekly-quarter-label {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+}
+
+/* Announcements */
+.announcements-banner {
+    background: #FFF8E1;
+    border: 1px solid #FFE082;
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.announcements-header {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+    color: #F57F17;
+}
+
+.announcement-item {
+    font-size: 0.85rem;
+    padding: 0.2rem 0;
+    line-height: 1.4;
+}
+
+.announcement-link {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+}
+
+.announcement-link:hover {
+    text-decoration-color: var(--cardinal);
+    color: var(--cardinal);
+}
+
+/* Grid */
+.weekly-grid-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.weekly-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.weekly-grid th,
+.weekly-grid td {
+    border: 1px solid var(--border);
+    vertical-align: top;
+    padding: 0.6rem 0.75rem;
+}
+
+/* Sticky column headers (vertical scroll) */
+.weekly-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--card-bg);
+}
+
+.week-header-col {
+    width: 140px;
+    min-width: 140px;
+    position: sticky;
+    left: 0;
+    top: 0;
+    background: var(--card-bg);
+    z-index: 12;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.course-col-header {
+    min-width: 180px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--card-bg);
+    text-align: center;
+}
+
+/* Sticky week labels (horizontal scroll) */
+.week-label-cell {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg);
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+.assignment-cell {
+    min-width: 180px;
+    background: var(--card-bg);
+}
+
+/* Current week highlight */
+.current-week-row td {
+    background: #FFF8E1;
+}
+
+.current-week-row .week-label-cell {
+    background: #FFF3CD;
+}
+
+.current-week-label {
+    background: #FFF3CD !important;
+}
+
+.this-week-badge {
+    display: inline-block;
+    background: #F59E0B;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+}
+
+/* Assignment cards */
+.assignment-card {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.65rem;
+    margin-bottom: 0.4rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: box-shadow 0.15s, transform 0.15s;
+    cursor: default;
+}
+
+.current-week-row .assignment-card {
+    background: var(--card-bg);
+}
+
+.assignment-card:last-child { margin-bottom: 0; }
+
+.assignment-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+}
+
+.assignment-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--cardinal);
+    text-decoration: none;
+    display: block;
+    line-height: 1.3;
+    margin-bottom: 0.15rem;
+}
+
+.assignment-name:hover {
+    text-decoration: underline;
+}
+
+.assignment-due {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Tooltip bubble */
+.tooltip-bubble {
+    position: absolute;
+    z-index: 1000;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    max-width: 340px;
+    min-width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+    pointer-events: auto;
+}
+
+.tooltip-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 0.3rem;
+    line-height: 1.3;
+}
+
+.tooltip-due {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.tooltip-points {
+    font-size: 0.8rem;
+    color: var(--cardinal);
+    font-weight: 500;
+    margin-bottom: 0.35rem;
+}
+
+.tooltip-summary {
+    font-size: 0.82rem;
+    color: var(--text);
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+    padding-top: 0.4rem;
+    margin-top: 0.15rem;
+}
+
+/* Empty state */
+.weekly-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .weekly-container {
+        flex-direction: column;
+    }
+    .weekly-sidebar {
+        width: 100%;
+        min-width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .weekly-sidebar.collapsed {
+        width: 100%;
+        min-width: 100%;
+        padding: 0.5rem 1rem;
+    }
+    .weekly-sidebar.collapsed .sidebar-body { display: none; }
+    .weekly-sidebar.collapsed .sidebar-header h3 { display: none; }
+    .weekly-main {
+        padding: 1rem;
+    }
+    .weekly-grid-wrapper {
+        max-height: none;
+    }
+}

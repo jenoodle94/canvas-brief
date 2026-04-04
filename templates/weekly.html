@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+{% block title %}Weekly View — Canvas Brief{% endblock %}
+
+{% block content %}
+<style>main { max-width: none; padding: 0; }</style>
+<div class="weekly-container">
+
+    <!-- Sidebar -->
+    <aside class="weekly-sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>Courses</h3>
+            <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">&#9776;</button>
+        </div>
+        <div class="sidebar-body" id="sidebarBody">
+            <div class="sidebar-loading">Loading courses...</div>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <div class="weekly-main">
+
+        <!-- Announcements banner -->
+        <div class="announcements-banner" id="announcementsBanner" style="display:none;">
+            <div class="announcements-header">Heads Up</div>
+            <div class="announcements-list" id="announcementsList"></div>
+        </div>
+
+        <!-- Quarter label -->
+        <div class="weekly-quarter-label" id="quarterLabel"></div>
+
+        <!-- Grid wrapper -->
+        <div class="weekly-grid-wrapper" id="gridWrapper">
+            <div class="weekly-empty" id="emptyState" style="display:none;">
+                Clear skies ahead &#9788;&#65039; No assignments found for this quarter
+            </div>
+            <table class="weekly-grid" id="weeklyGrid" style="display:none;">
+                <thead id="gridHead"></thead>
+                <tbody id="gridBody"></tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip-bubble" id="tooltip" style="display:none;">
+    <div class="tooltip-name" id="tooltipName"></div>
+    <div class="tooltip-due" id="tooltipDue"></div>
+    <div class="tooltip-points" id="tooltipPoints"></div>
+    <div class="tooltip-summary" id="tooltipSummary">Loading summary...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // --- State ---
+    var courses = [];
+    var assignments = [];
+    var visibleCourses = new Set();
+    var tooltipTimeout = null;
+    var activeTooltipId = null;
+
+    // --- Helpers ---
+    function getSunday(date) {
+        var d = new Date(date);
+        d.setDate(d.getDate() - d.getDay());
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+
+    function getSaturday(date) {
+        var d = new Date(date);
+        d.setDate(d.getDate() + (6 - d.getDay()));
+        d.setHours(23, 59, 59, 999);
+        return d;
+    }
+
+    function addDays(date, days) {
+        var d = new Date(date);
+        d.setDate(d.getDate() + days);
+        return d;
+    }
+
+    function formatDateShort(date) {
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[date.getMonth()] + ' ' + date.getDate();
+    }
+
+    function formatDueDate(isoStr) {
+        var d = new Date(isoStr);
+        var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var hours = d.getHours();
+        var ampm = hours >= 12 ? 'pm' : 'am';
+        hours = hours % 12 || 12;
+        var mins = d.getMinutes().toString().padStart(2, '0');
+        return days[d.getDay()] + ' ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + hours + ':' + mins + ampm;
+    }
+
+    function isCurrentWeek(weekStart, weekEnd) {
+        var now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return now >= weekStart && now <= weekEnd;
+    }
+
+    function buildWeekRows(allAssignments) {
+        if (allAssignments.length === 0) return [];
+
+        // Find quarter boundaries from earliest and latest due dates
+        var dueDates = allAssignments.map(function(a) { return new Date(a.due_at); });
+        var earliest = new Date(Math.min.apply(null, dueDates));
+        var latest = new Date(Math.max.apply(null, dueDates));
+
+        var quarterStart = getSunday(earliest);
+        var quarterEnd = getSaturday(latest);
+
+        var weeks = [];
+        var current = new Date(quarterStart);
+        while (current <= quarterEnd) {
+            var weekStart = new Date(current);
+            var weekEnd = addDays(weekStart, 6);
+            weekEnd.setHours(23, 59, 59, 999);
+            weeks.push({ start: weekStart, end: weekEnd });
+            current = addDays(current, 7);
+        }
+        return weeks;
+    }
+
+    // --- localStorage cache ---
+    function getCachedSummary(assignmentId, updatedAt) {
+        try {
+            var cached = localStorage.getItem('summary_' + assignmentId);
+            if (cached) {
+                var parsed = JSON.parse(cached);
+                if (parsed.updatedAt === updatedAt) return parsed.summary;
+            }
+        } catch(e) {}
+        return null;
+    }
+
+    function cacheSummary(assignmentId, updatedAt, summary) {
+        try {
+            localStorage.setItem('summary_' + assignmentId, JSON.stringify({ updatedAt: updatedAt, summary: summary }));
+        } catch(e) {}
+    }
+
+    function getCachedAnnouncements(assignmentIds) {
+        try {
+            var key = 'announcements_' + assignmentIds.slice().sort().join(',');
+            var cached = localStorage.getItem(key);
+            if (cached) return JSON.parse(cached);
+        } catch(e) {}
+        return null;
+    }
+
+    function cacheAnnouncements(assignmentIds, announcements) {
+        try {
+            var key = 'announcements_' + assignmentIds.slice().sort().join(',');
+            localStorage.setItem(key, JSON.stringify(announcements));
+        } catch(e) {}
+    }
+
+    function loadSidebarState() {
+        try {
+            var saved = localStorage.getItem('weekly_visible_courses');
+            if (saved) return new Set(JSON.parse(saved));
+        } catch(e) {}
+        return null;
+    }
+
+    function saveSidebarState() {
+        try {
+            localStorage.setItem('weekly_visible_courses', JSON.stringify(Array.from(visibleCourses)));
+        } catch(e) {}
+    }
+
+    // --- Data fetching ---
+    async function fetchWeeklyData() {
+        var resp = await fetch('/api/weekly-data');
+        if (!resp.ok) throw new Error('Failed to fetch data');
+        return await resp.json();
+    }
+
+    async function fetchSummary(assignment) {
+        var cached = getCachedSummary(assignment.id, assignment.updated_at);
+        if (cached) return cached;
+
+        try {
+            var resp = await fetch('/api/assignment-summary', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    assignment_id: assignment.id,
+                    name: assignment.name,
+                    description: assignment.description
+                })
+            });
+            var data = await resp.json();
+            cacheSummary(assignment.id, assignment.updated_at, data.summary);
+            return data.summary;
+        } catch(e) {
+            return assignment.name;
+        }
+    }
+
+    async function fetchAnnouncements(assignmentList) {
+        var ids = assignmentList.map(function(a) { return a.id; });
+        var cached = getCachedAnnouncements(ids);
+        if (cached) {
+            renderAnnouncements(cached);
+            return;
+        }
+
+        try {
+            var resp = await fetch('/api/announcements', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ assignments: assignmentList })
+            });
+            var data = await resp.json();
+            cacheAnnouncements(ids, data.announcements);
+            renderAnnouncements(data.announcements);
+        } catch(e) {
+            renderAnnouncements([]);
+        }
+    }
+
+    // --- Tooltip ---
+    function showTooltip(cardEl, assignment) {
+        var tooltip = document.getElementById('tooltip');
+        var nameEl = document.getElementById('tooltipName');
+        var dueEl = document.getElementById('tooltipDue');
+        var pointsEl = document.getElementById('tooltipPoints');
+        var summaryEl = document.getElementById('tooltipSummary');
+
+        nameEl.textContent = assignment.name;
+        dueEl.textContent = formatDueDate(assignment.due_at);
+
+        if (assignment.points_possible !== null && assignment.points_possible !== undefined) {
+            pointsEl.textContent = assignment.points_possible + ' points possible';
+            pointsEl.style.display = 'block';
+        } else {
+            pointsEl.style.display = 'none';
+        }
+
+        // Check cache first for instant display
+        var cached = getCachedSummary(assignment.id, assignment.updated_at);
+        if (cached) {
+            summaryEl.textContent = cached;
+        } else {
+            summaryEl.textContent = 'Loading summary...';
+            fetchSummary(assignment).then(function(summary) {
+                if (activeTooltipId === assignment.id) {
+                    summaryEl.textContent = summary;
+                }
+            });
+        }
+
+        tooltip.style.display = 'block';
+        activeTooltipId = assignment.id;
+
+        // Position the tooltip
+        var rect = cardEl.getBoundingClientRect();
+        var tooltipRect = tooltip.getBoundingClientRect();
+        var spaceBelow = window.innerHeight - rect.bottom;
+        var spaceAbove = rect.top;
+
+        var left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2);
+        // Keep within viewport horizontally
+        left = Math.max(8, Math.min(left, window.innerWidth - tooltip.offsetWidth - 8));
+
+        if (spaceBelow > tooltipRect.height + 12 || spaceBelow > spaceAbove) {
+            // Show below
+            tooltip.style.top = (rect.bottom + 8 + window.scrollY) + 'px';
+            tooltip.classList.remove('tooltip-above');
+            tooltip.classList.add('tooltip-below');
+        } else {
+            // Show above
+            tooltip.style.top = (rect.top - tooltip.offsetHeight - 8 + window.scrollY) + 'px';
+            tooltip.classList.remove('tooltip-below');
+            tooltip.classList.add('tooltip-above');
+        }
+        tooltip.style.left = left + 'px';
+    }
+
+    function hideTooltip() {
+        var tooltip = document.getElementById('tooltip');
+        tooltip.style.display = 'none';
+        activeTooltipId = null;
+    }
+
+    // --- Rendering ---
+    function renderAnnouncements(announcements) {
+        var banner = document.getElementById('announcementsBanner');
+        var list = document.getElementById('announcementsList');
+        if (!announcements || announcements.length === 0) {
+            banner.style.display = 'none';
+            return;
+        }
+        banner.style.display = 'block';
+        list.innerHTML = announcements.map(function(a) {
+            if (a.url) {
+                return '<div class="announcement-item"><a href="' + a.url + '" target="_blank" class="announcement-link">' + a.text + '</a></div>';
+            }
+            return '<div class="announcement-item"><span>' + a.text + '</span></div>';
+        }).join('');
+    }
+
+    function renderSidebar() {
+        var body = document.getElementById('sidebarBody');
+        if (courses.length === 0) {
+            body.innerHTML = '<div class="sidebar-loading">No courses found</div>';
+            return;
+        }
+        body.innerHTML = courses.map(function(c) {
+            var checked = visibleCourses.has(c.id) ? 'checked' : '';
+            return '<label class="sidebar-course">' +
+                '<input type="checkbox" ' + checked + ' data-course-id="' + c.id + '">' +
+                '<span class="course-color-dot" style="background:' + c.color + '"></span>' +
+                '<span class="course-label">' + c.name + '</span>' +
+                '</label>';
+        }).join('');
+
+        body.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var cid = parseInt(cb.dataset.courseId);
+                if (cb.checked) visibleCourses.add(cid);
+                else visibleCourses.delete(cid);
+                saveSidebarState();
+                renderGrid();
+            });
+        });
+    }
+
+    function renderGrid() {
+        var activeCourses = courses.filter(function(c) { return visibleCourses.has(c.id); });
+        var grid = document.getElementById('weeklyGrid');
+        var emptyState = document.getElementById('emptyState');
+        var visibleAssignments = assignments.filter(function(a) { return visibleCourses.has(a.course_id); });
+
+        var weeks = buildWeekRows(visibleAssignments);
+
+        if (activeCourses.length === 0 || weeks.length === 0) {
+            grid.style.display = 'none';
+            emptyState.style.display = 'block';
+            document.getElementById('quarterLabel').textContent = '';
+            return;
+        }
+        grid.style.display = 'table';
+        emptyState.style.display = 'none';
+
+        // Quarter label
+        var qLabel = document.getElementById('quarterLabel');
+        qLabel.textContent = formatDateShort(weeks[0].start) + ' \u2013 ' + formatDateShort(weeks[weeks.length - 1].end);
+
+        // Build header
+        var thead = document.getElementById('gridHead');
+        thead.innerHTML = '<tr><th class="week-header-col">Week</th>' +
+            activeCourses.map(function(c) {
+                return '<th class="course-col-header" style="border-bottom: 3px solid ' + c.color + '">' + c.name + '</th>';
+            }).join('') + '</tr>';
+
+        // Build rows
+        var tbody = document.getElementById('gridBody');
+        tbody.innerHTML = '';
+        var currentWeekRow = null;
+
+        weeks.forEach(function(week) {
+            var row = document.createElement('tr');
+            var current = isCurrentWeek(week.start, week.end);
+            if (current) {
+                row.className = 'current-week-row';
+                row.id = 'currentWeekRow';
+                currentWeekRow = row;
+            }
+
+            var labelCell = document.createElement('td');
+            labelCell.className = 'week-label-cell' + (current ? ' current-week-label' : '');
+            var labelText = formatDateShort(week.start) + ' \u2013 ' + formatDateShort(week.end);
+            if (current) {
+                labelText = '<span class="this-week-badge">This Week</span>' + labelText;
+            }
+            labelCell.innerHTML = labelText;
+            row.appendChild(labelCell);
+
+            activeCourses.forEach(function(course) {
+                var cell = document.createElement('td');
+                cell.className = 'assignment-cell';
+
+                var cellAssignments = visibleAssignments.filter(function(a) {
+                    if (a.course_id !== course.id) return false;
+                    var dueDate = new Date(a.due_at);
+                    return dueDate >= week.start && dueDate <= week.end;
+                });
+
+                if (cellAssignments.length > 0) {
+                    cell.innerHTML = cellAssignments.map(function(a) {
+                        return '<div class="assignment-card" style="border-left: 3px solid ' + a.course_color + '" data-assignment-id="' + a.id + '">' +
+                            '<a href="' + a.html_url + '" target="_blank" class="assignment-name">' + a.name + '</a>' +
+                            '<div class="assignment-due">' + formatDueDate(a.due_at) + '</div>' +
+                            '</div>';
+                    }).join('');
+                }
+                row.appendChild(cell);
+            });
+
+            tbody.appendChild(row);
+        });
+
+        // Bind tooltip events to assignment cards
+        bindTooltipEvents(visibleAssignments);
+
+        // Auto-scroll to current week
+        if (currentWeekRow) {
+            setTimeout(function() {
+                currentWeekRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+    }
+
+    function bindTooltipEvents(visibleAssignments) {
+        // Build lookup map
+        var assignmentMap = {};
+        visibleAssignments.forEach(function(a) { assignmentMap[a.id] = a; });
+
+        document.querySelectorAll('.assignment-card').forEach(function(card) {
+            var aid = parseInt(card.dataset.assignmentId);
+            var assignment = assignmentMap[aid];
+            if (!assignment) return;
+
+            card.addEventListener('mouseenter', function() {
+                clearTimeout(tooltipTimeout);
+                tooltipTimeout = setTimeout(function() {
+                    showTooltip(card, assignment);
+                }, 200);
+            });
+
+            card.addEventListener('mouseleave', function() {
+                clearTimeout(tooltipTimeout);
+                tooltipTimeout = setTimeout(function() {
+                    hideTooltip();
+                }, 150);
+            });
+        });
+
+        // Keep tooltip visible when hovering over the tooltip itself
+        var tooltip = document.getElementById('tooltip');
+        tooltip.addEventListener('mouseenter', function() {
+            clearTimeout(tooltipTimeout);
+        });
+        tooltip.addEventListener('mouseleave', function() {
+            tooltipTimeout = setTimeout(function() {
+                hideTooltip();
+            }, 150);
+        });
+    }
+
+    // --- Main load ---
+    async function loadWeeklyView() {
+        try {
+            var data = await fetchWeeklyData();
+            courses = data.courses || [];
+            assignments = data.assignments || [];
+
+            var savedState = loadSidebarState();
+            if (savedState && savedState.size > 0) {
+                visibleCourses = new Set(Array.from(savedState).filter(function(id) {
+                    return courses.some(function(c) { return c.id === id; });
+                }));
+            } else {
+                visibleCourses = new Set(courses.map(function(c) { return c.id; }));
+            }
+
+            renderSidebar();
+            renderGrid();
+
+            if (assignments.length > 0) {
+                fetchAnnouncements(assignments);
+            }
+
+        } catch(e) {
+            document.getElementById('emptyState').textContent = 'Error loading data. Please try again.';
+            document.getElementById('emptyState').style.display = 'block';
+        }
+    }
+
+    // --- Event listeners ---
+    document.getElementById('sidebarToggle').addEventListener('click', function() {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+    });
+
+    // --- Init ---
+    loadWeeklyView();
+})();
+</script>
+{% endblock %}

@@ -152,6 +152,59 @@ def get_item_content(token, item):
     return None
 
 
+def get_assignments(token, course_id):
+    """Fetch all assignments with due dates for a course."""
+    params = {"per_page": 100, "order_by": "due_at"}
+    resp = requests.get(
+        f"{CANVAS_BASE}/api/v1/courses/{course_id}/assignments",
+        headers=_headers(token),
+        params=params,
+        timeout=15,
+    )
+    if resp.status_code == 400:
+        return []
+    resp.raise_for_status()
+    assignments = resp.json()
+
+    results = []
+    for a in assignments:
+        if not a.get("due_at"):
+            continue
+        results.append({
+            "id": a["id"],
+            "name": a.get("name", "Untitled"),
+            "due_at": a["due_at"],
+            "html_url": a.get("html_url", ""),
+            "description": strip_html(a.get("description") or ""),
+            "course_id": course_id,
+            "updated_at": a.get("updated_at", ""),
+            "points_possible": a.get("points_possible"),
+        })
+    return results
+
+
+def get_course_colors(token):
+    """Fetch user's custom course colors from Canvas."""
+    resp = requests.get(
+        f"{CANVAS_BASE}/api/v1/users/self/colors",
+        headers=_headers(token),
+        timeout=10,
+    )
+    if not resp.ok:
+        return {}
+    data = resp.json()
+    # Returns {"custom_colors": {"course_12345": "#abc123", ...}}
+    colors = {}
+    for key, color in data.get("custom_colors", {}).items():
+        if key.startswith("course_"):
+            course_id = key.replace("course_", "")
+            try:
+                colors[int(course_id)] = color
+            except ValueError:
+                pass
+    return colors
+
+
 def fetch_module_content(token, course_id, module):
     """Fetch all readable content from a module. Returns text blob."""
     items = get_module_items(token, course_id, module["id"])

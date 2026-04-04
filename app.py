@@ -14,6 +14,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     session, flash, send_from_directory, jsonify,
 )
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -223,6 +224,148 @@ def view(brief_id):
 
     database.log_event("download", brief["course_name"], brief["module_name"], ip_hash=ip_hash())
     return send_from_directory(BRIEFS_DIR, brief["filename"], as_attachment=False)
+
+
+@app.route("/weekly")
+def weekly():
+    """Weekly assignment grid view."""
+    token = session.get("canvas_token")
+    if not token:
+        flash("Please connect your Canvas account first.", "error")
+        return redirect(url_for("index"))
+    return render_template("weekly.html")
+
+
+@app.route("/api/weekly-data")
+def api_weekly_data():
+    """Fetch all courses and their assignments for the full-quarter weekly view."""
+    token = session.get("canvas_token")
+    if not token:
+        return jsonify({"error": "Not connected"}), 401
+
+    try:
+        courses = canvas_api.get_courses(token)
+        colors = canvas_api.get_course_colors(token)
+
+        all_assignments = []
+        course_list = []
+        for course in courses:
+            cid = course["id"]
+            course_list.append({
+                "id": cid,
+                "name": course["name"],
+                "color": colors.get(cid, "#8C1515"),
+            })
+            assignments = canvas_api.get_assignments(token, cid)
+            for a in assignments:
+                a["course_name"] = course["name"]
+                a["course_color"] = colors.get(cid, "#8C1515")
+            all_assignments.extend(assignments)
+
+        return jsonify({
+            "courses": course_list,
+            "assignments": all_assignments,
+        })
+    except Exception as e:
+        app.logger.error(f"Weekly data error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/assignment-summary", methods=["POST"])
+def api_assignment_summary():
+    """Generate a short AI summary for an assignment description."""
+    token = session.get("canvas_token")
+    if not token:
+        return jsonify({"error": "Not connected"}), 401
+
+    data = request.get_json()
+    assignment_id = data.get("assignment_id")
+    description = data.get("description", "")
+    name = data.get("name", "")
+
+    if not description.strip():
+        return jsonify({"summary": name})
+
+    try:
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=150,
+            messages=[{"role": "user", "content": (
+                f"Summarize this assignment in 2-3 sentences. "
+                f"Be action-oriented and use plain language. Describe what the student needs to do. "
+                f"Assignment: \"{name}\"\n\nDescription: {description[:2000]}"
+            )}],
+        )
+        return jsonify({"summary": message.content[0].text})
+    except Exception as e:
+        app.logger.error(f"Summary generation error: {e}")
+        return jsonify({"summary": name})
+
+
+@app.route("/api/announcements", methods=["POST"])
+def api_announcements():
+    """Generate AI-powered pre-task announcements from assignment descriptions."""
+    token = session.get("canvas_token")
+    if not token:
+        return jsonify({"error": "Not connected"}), 401
+
+    data = request.get_json()
+    assignments = data.get("assignments", [])
+
+    # Filter to assignments that mention pre-task keywords
+    keywords = ["team", "partner", "sign up", "peer review", "draft due",
+                 "proposal", "group", "register", "form a", "pre-work",
+                 "before class", "preparation", "prerequisite"]
+
+    candidates = []
+    for a in assignments:
+        desc = (a.get("description") or "").lower()
+        name = (a.get("name") or "").lower()
+        text = desc + " " + name
+        if any(kw in text for kw in keywords):
+            candidates.append(a)
+
+    if not candidates:
+        return jsonify({"announcements": []})
+
+    # Sort by due date (soonest first) and limit to 5
+    candidates.sort(key=lambda x: x.get("due_at", ""))
+    candidates = candidates[:5]
+
+    try:
+        descs = "\n\n".join(
+            f"- \"{a['name']}\" (due {a['due_at']}, course: {a.get('course_name', 'Unknown')}): "
+            f"{(a.get('description') or '')[:500]}"
+            for a in candidates
+        )
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": (
+                f"From these upcoming assignments, extract 3-5 time-sensitive action items "
+                f"that students need to do BEFORE the due date (like forming teams, signing up, "
+                f"submitting drafts, doing peer reviews, etc). For each, write a single-line "
+                f"reminder starting with a pin emoji. Include the course name and key date. "
+                f"If none have pre-task actions, return an empty list.\n\n{descs}\n\n"
+                f"Return ONLY the reminder lines, one per line. No extra text."
+            )}],
+        )
+        lines = [l.strip() for l in message.content[0].text.strip().split("\n") if l.strip()]
+        announcements = []
+        for i, line in enumerate(lines[:5]):
+            # Try to match to the original assignment for linking
+            linked_url = ""
+            for a in candidates:
+                if a["name"].lower()[:20] in line.lower() or a.get("course_name", "").lower() in line.lower():
+                    linked_url = a.get("html_url", "")
+                    break
+            announcements.append({"text": line, "url": linked_url})
+        return jsonify({"announcements": announcements})
+    except Exception as e:
+        app.logger.error(f"Announcements error: {e}")
+        return jsonify({"announcements": []})
 
 
 @app.route("/metrics")
